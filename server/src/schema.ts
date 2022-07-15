@@ -1,8 +1,3 @@
-import { permissions } from './permissions'
-import { APP_SECRET, getUserId } from './utils'
-import { compare, hash } from 'bcryptjs'
-import { sign } from 'jsonwebtoken'
-import { applyMiddleware } from 'graphql-middleware'
 import {
   intArg,
   makeSchema,
@@ -22,45 +17,33 @@ export const DateTime = asNexusMethod(DateTimeResolver, 'date')
 const Query = objectType({
   name: 'Query',
   definition(t) {
-    t.nonNull.list.nonNull.field('allUsers', {
+    t.nonNull.list.nonNull.field('users', {
       type: 'User',
       resolve: (_parent, _args, context: Context) => {
         return context.prisma.user.findMany()
       },
     })
 
-    t.nullable.field('me', {
-      type: 'User',
-      resolve: (parent, args, context: Context) => {
-        const userId = getUserId(context)
-        return context.prisma.user.findUnique({
-          where: {
-            id: Number(userId),
-          },
-        })
-      },
-    })
-
-    t.nullable.field('postById', {
-      type: 'Post',
+    t.nullable.field('jobById', {
+      type: 'Job',
       args: {
         id: intArg(),
       },
       resolve: (_parent, args, context: Context) => {
-        return context.prisma.post.findUnique({
+        return context.prisma.job.findUnique({
           where: { id: args.id || undefined },
         })
       },
     })
 
     t.nonNull.list.nonNull.field('feed', {
-      type: 'Post',
+      type: 'Job',
       args: {
         searchString: stringArg(),
         skip: intArg(),
         take: intArg(),
         orderBy: arg({
-          type: 'PostOrderByUpdatedAtInput',
+          type: 'jobOrderByUpdatedAtInput',
         }),
       },
       resolve: (_parent, args, context: Context) => {
@@ -73,7 +56,7 @@ const Query = objectType({
             }
           : {}
 
-        return context.prisma.post.findMany({
+        return context.prisma.job.findMany({
           where: {
             published: true,
             ...or,
@@ -86,7 +69,7 @@ const Query = objectType({
     })
 
     t.list.field('draftsByUser', {
-      type: 'Post',
+      type: 'job',
       args: {
         userUniqueInput: nonNull(
           arg({
@@ -102,7 +85,7 @@ const Query = objectType({
               email: args.userUniqueInput.email || undefined,
             },
           })
-          .posts({
+          .jobs({
             where: {
               published: false,
             },
@@ -115,108 +98,86 @@ const Query = objectType({
 const Mutation = objectType({
   name: 'Mutation',
   definition(t) {
-    t.field('signup', {
-      type: 'AuthPayload',
-      args: {
-        name: stringArg(),
-        email: nonNull(stringArg()),
-        password: nonNull(stringArg()),
-      },
-      resolve: async (_parent, args, context: Context) => {
-        const hashedPassword = await hash(args.password, 10)
-        const user = await context.prisma.user.create({
-          data: {
-            name: args.name,
-            email: args.email,
-            password: hashedPassword,
-          },
-        })
-        return {
-          token: sign({ userId: user.id }, APP_SECRET),
-          user,
-        }
-      },
-    })
-
-    t.field('login', {
-      type: 'AuthPayload',
-      args: {
-        email: nonNull(stringArg()),
-        password: nonNull(stringArg()),
-      },
-      resolve: async (_parent, { email, password }, context: Context) => {
-        const user = await context.prisma.user.findUnique({
-          where: {
-            email,
-          },
-        })
-        if (!user) {
-          throw new Error(`No user found for email: ${email}`)
-        }
-        const passwordValid = await compare(password, user.password)
-        if (!passwordValid) {
-          throw new Error('Invalid password')
-        }
-        return {
-          token: sign({ userId: user.id }, APP_SECRET),
-          user,
-        }
-      },
-    })
-
-    t.field('createDraft', {
-      type: 'Post',
+    t.nonNull.field('signupUser', {
+      type: 'User',
       args: {
         data: nonNull(
           arg({
-            type: 'PostCreateInput',
+            type: 'UserCreateInput',
           }),
         ),
       },
       resolve: (_, args, context: Context) => {
-        const userId = getUserId(context)
-        return context.prisma.post.create({
+        const jobData = args.data.jobs?.map((job) => {
+          return { title: job.title, content: job.content || undefined }
+        })
+        return context.prisma.user.create({
           data: {
-            title: args.data.title,
-            content: args.data.content,
-            authorId: userId,
+            name: args.data.name,
+            email: args.data.email,
+            jobs: {
+              create: jobData,
+            },
           },
         })
       },
     })
 
-    t.field('togglePublishPost', {
-      type: 'Post',
+    t.field('createDraft', {
+      type: 'job',
+      args: {
+        data: nonNull(
+          arg({
+            type: 'jobCreateInput',
+          }),
+        ),
+        authorEmail: nonNull(stringArg()),
+      },
+      resolve: (_, args, context: Context) => {
+        return context.prisma.job.create({
+          data: {
+            title: args.data.title,
+            content: args.data.content,
+            author: {
+              connect: { email: args.authorEmail },
+            },
+          },
+        })
+      },
+    })
+
+    t.field('togglePublishjob', {
+      type: 'job',
       args: {
         id: nonNull(intArg()),
       },
       resolve: async (_, args, context: Context) => {
         try {
-          const post = await context.prisma.post.findUnique({
+          const job = await context.prisma.job.findUnique({
             where: { id: args.id || undefined },
             select: {
               published: true,
             },
           })
-          return context.prisma.post.update({
+          return context.prisma.job.update({
             where: { id: args.id || undefined },
-            data: { published: !post?.published },
+            data: { published: !job?.published },
           })
         } catch (e) {
           throw new Error(
-            `Post with ID ${args.id} does not exist in the database.`,
+            `job with ID ${args.id} does not exist in the database.`,
           )
         }
       },
     })
 
-    t.field('incrementPostViewCount', {
-      type: 'Post',
+    t.field('incrementjobViewCount', {
+      type: 'job',
       args: {
         id: nonNull(intArg()),
       },
       resolve: (_, args, context: Context) => {
-        return context.prisma.post.update({
+        return context.prisma.job.update({
           where: { id: args.id || undefined },
           data: {
             viewCount: {
@@ -227,13 +188,13 @@ const Mutation = objectType({
       },
     })
 
-    t.field('deletePost', {
-      type: 'Post',
+    t.field('deletejob', {
+      type: 'job',
       args: {
         id: nonNull(intArg()),
       },
       resolve: (_, args, context: Context) => {
-        return context.prisma.post.delete({
+        return context.prisma.job.delete({
           where: { id: args.id },
         })
       },
@@ -247,21 +208,21 @@ const User = objectType({
     t.nonNull.int('id')
     t.string('name')
     t.nonNull.string('email')
-    t.nonNull.list.nonNull.field('posts', {
-      type: 'Post',
+    t.nonNull.list.nonNull.field('jobs', {
+      type: 'job',
       resolve: (parent, _, context: Context) => {
         return context.prisma.user
           .findUnique({
             where: { id: parent.id || undefined },
           })
-          .posts()
+          .jobs()
       },
     })
   },
 })
 
-const Post = objectType({
-  name: 'Post',
+const job = objectType({
+  name: 'job',
   definition(t) {
     t.nonNull.int('id')
     t.nonNull.field('createdAt', { type: 'DateTime' })
@@ -273,7 +234,7 @@ const Post = objectType({
     t.field('author', {
       type: 'User',
       resolve: (parent, _, context: Context) => {
-        return context.prisma.post
+        return context.prisma.job
           .findUnique({
             where: { id: parent.id || undefined },
           })
@@ -288,8 +249,8 @@ const SortOrder = enumType({
   members: ['asc', 'desc'],
 })
 
-const PostOrderByUpdatedAtInput = inputObjectType({
-  name: 'PostOrderByUpdatedAtInput',
+const jobOrderByUpdatedAtInput = inputObjectType({
+  name: 'jobOrderByUpdatedAtInput',
   definition(t) {
     t.nonNull.field('updatedAt', { type: 'SortOrder' })
   },
@@ -303,8 +264,8 @@ const UserUniqueInput = inputObjectType({
   },
 })
 
-const PostCreateInput = inputObjectType({
-  name: 'PostCreateInput',
+const jobCreateInput = inputObjectType({
+  name: 'jobCreateInput',
   definition(t) {
     t.nonNull.string('title')
     t.string('content')
@@ -316,30 +277,21 @@ const UserCreateInput = inputObjectType({
   definition(t) {
     t.nonNull.string('email')
     t.string('name')
-    t.list.nonNull.field('posts', { type: 'PostCreateInput' })
+    t.list.nonNull.field('jobs', { type: 'jobCreateInput' })
   },
 })
 
-const AuthPayload = objectType({
-  name: 'AuthPayload',
-  definition(t) {
-    t.string('token')
-    t.field('user', { type: 'User' })
-  },
-})
-
-const schemaWithoutPermissions = makeSchema({
+export const schema = makeSchema({
   types: [
     Query,
     Mutation,
-    Post,
+    job,
     User,
-    AuthPayload,
     UserUniqueInput,
     UserCreateInput,
-    PostCreateInput,
+    jobCreateInput,
     SortOrder,
-    PostOrderByUpdatedAtInput,
+    jobOrderByUpdatedAtInput,
     DateTime,
   ],
   outputs: {
@@ -359,5 +311,3 @@ const schemaWithoutPermissions = makeSchema({
     ],
   },
 })
-
-export const schema = applyMiddleware(schemaWithoutPermissions, permissions)

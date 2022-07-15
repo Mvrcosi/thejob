@@ -3,26 +3,27 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = "postgresql://postgres:Admin11@localhost:5432/thejob"
 }
 
 model User {
-  id       Int     @id @default(autoincrement())
-  email    String  @unique
-  password String
-  name     String?
-  posts    Post[]
+  id    Int     @id @default(autoincrement())
+  email String  @unique
+  name  String?
+  jobs Job[]
 }
 
-model Post {
+model Job {
   id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  viewCount Int      @default(0)
-  author    User?    @relation(fields: [authorId], references: [id])
-  authorId  Int?
+  jobTitle                String
+  companyName             String
+  applicationStatus       String
+  notes                   String?
+  dateApplied             String?
+  user    User?    @relation(fields: [userId], references: [id])
+  userId  Int?
 }
+
+
+// npx prisma migrate dev --name blah blah     - mirgrate this over to postgres

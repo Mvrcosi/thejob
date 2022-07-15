@@ -1,16 +1,15 @@
 import { ApolloServer } from 'apollo-server'
-import { createContext } from './context'
 import { schema } from './schema'
+import { context } from './context'
 
 const server = new ApolloServer({
-  schema,
-  context: createContext,
+  schema: schema,
+  context: context,
 })
 
-server.listen().then(({ url }) =>
-  console.log(
-    `\
+server.listen().then(async ({ url }) => {
+  console.log(`\
 🚀 Server ready at: ${url}
-⭐️ See sample queries: http://pris.ly/e/ts/graphql-auth#using-the-graphql-api`,
-  ),
-)
+⭐️ See sample queries: http://pris.ly/e/ts/graphql#using-the-graphql-api
+  `)
+})

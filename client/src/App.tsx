@@ -1,25 +1,33 @@
 import React from 'react';
-import tw from 'twin.macro';
-import styled from 'styled-components'
+import Dashboard from './components/Dashboard';
+import { ApolloClient, InMemoryCache, ApolloProvider} from '@apollo/client';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+} from "react-router-dom";
+
+import Home from './components/Home';
+
+const client = new ApolloClient({
+  uri: 'http://localhost:4000',
+  cache: new InMemoryCache(),
+});
+
 
 function App() {
   return (
-    <div className="App">
-        <Text>
-          Hello World
-        </Text>
-    </div>
+    <ApolloProvider client={client}>
+        <Router>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+          </Routes>
+        </Router>
+    </ApolloProvider>
   );
 }
 
 
-const Text = styled.h1`
-
-  ${tw`
-
-
-  `}
-
-`
 
 export default App;
